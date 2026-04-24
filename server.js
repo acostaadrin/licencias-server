@@ -16,7 +16,7 @@ const LICENCIAS = {
 	expira: "2026-12-31"
   },
   "B23VB200":
-	{ activo: false,
+	{ activo: true,
 	usuario: "Ale",
 	expira: "2026-12-31"
   },
