@@ -16,12 +16,12 @@ const LICENCIAS = {
 	expira: "2026-12-31"
   },
   "B23VB200":
-	{ activo: true,
+	{ activo: false,
 	usuario: "Ale",
 	expira: "2026-12-31"
   },
   "B23VB":
-	{ activo: false,
+	{ activo: true,
 	usuario: "Minions",
 	expira: "2026-05-31"
   },
