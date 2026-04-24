@@ -11,7 +11,7 @@ app.use(express.json());
 // ================= CONFIG =================
 
 // 🔐 Clave admin (cambiar en producción)
-const ADMIN_KEY = "SUPER_ADMIN_123!";
+const ADMIN_KEY = process.env.ADMIN_KEY;
 
 // 🔐 Base de licencias (temporal en memoria)
 const LICENCIAS = {
