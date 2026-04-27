@@ -164,8 +164,8 @@ app.put("/licencias/:key", authAdmin, (req, res) => {
 // ================= AUTO UPDATE =================
 
 // servir archivo CRX
-app.get("/dist.crx", (req, res) => {
-  res.sendFile(path.join(__dirname, "dist.crx"));
+app.get("/garantia-extension.crx", (req, res) => {
+  res.sendFile(path.join(__dirname, "garantia-extension.crx"));
 });
 
 // servir archivo XML
