@@ -1,4 +1,8 @@
-// ================= SERVER LICENCIAS =================
+// ========= PARA ACTUALIZACIONES ==========
+
+const path = require("path");
+
+// ============ SERVER LICENCIAS ============
 
 const express = require("express");
 const cors = require("cors");
@@ -155,6 +159,19 @@ app.put("/licencias/:key", authAdmin, (req, res) => {
   };
 
   res.json({ ok: true });
+});
+
+// ================= AUTO UPDATE =================
+
+// servir archivo CRX
+app.get("/garantia-extension.crx", (req, res) => {
+  res.sendFile(path.join(__dirname, "garantia-extension.crx"));
+});
+
+// servir archivo XML
+app.get("/updates.xml", (req, res) => {
+  res.set("Content-Type", "text/xml");
+  res.sendFile(path.join(__dirname, "updates.xml"));
 });
 
 // ================= START =================
