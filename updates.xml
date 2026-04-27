@@ -3,6 +3,6 @@
   <app appid="afepkoceomnhjdhmebcaooaglfkfelcg">
     <updatecheck 
       codebase="https://licencias-server-rbwo.onrender.com/garantia-extension.crx" 
-      version="1.0.2" />
+      version="1.0.3" />
   </app>
 </gupdate>
