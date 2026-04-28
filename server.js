@@ -26,22 +26,22 @@ const LICENCIAS = {
   },
   "B23VB200": {
     activo: true,
-    usuario: "Ale",
+    usuario: "Alejandra B.",
     expira: "2026-12-31"
   },
   "B23VB195": {
     activo: true,
-    usuario: "Minion1",
+    usuario: "Walter B.",
     expira: "2026-05-31"
   },
   "B23VB355": {
     activo: true,
-    usuario: "Minion2",
+    usuario: "Jorge G.",
     expira: "2026-05-31"
   },
   "B23VB888": {
     activo: true,
-    usuario: "Minion3",
+    usuario: "Fernando S.",
     expira: "2026-05-31"
   },
   "TEST-OK": {
