@@ -142,7 +142,16 @@ app.post("/registrar-uso", (req, res) => {
     fecha
   };
 
-  USOS.push(registro);
+    const existe = USOS.some(u =>
+    u.licencia === licencia &&
+    u.ot === ot &&
+    u.reclamo === reclamo &&
+    u.fecha === fecha
+  );
+  
+  if (!existe) {
+    USOS.push(registro);
+  }
 
   console.log("📊 USO REGISTRADO:", registro);
 
