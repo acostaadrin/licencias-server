@@ -6,7 +6,7 @@ const path = require("path");
 
 const express = require("express");
 const cors = require("cors");
-const sqlite3 = require("sqlite3").verbose();
+const Database = require("better-sqlite3");
 
 const app = express();
 
@@ -15,27 +15,22 @@ app.use(express.json());
 
 // ================= DATABASE =================
 
-const db = new sqlite3.Database("./database.db", (err) => {
-  if (err) {
-    console.error("❌ Error DB:", err);
-  } else {
-    console.log("🗄️ SQLite conectado");
-  }
-});
+const db = new Database("database.db");
 
-db.serialize(() => {
-  db.run(`
-    CREATE TABLE IF NOT EXISTS usos (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      clave TEXT UNIQUE,
-      usuario TEXT,
-      licencia TEXT,
-      ot TEXT,
-      reclamo TEXT,
-      fecha TEXT
-    )
-  `);
-});
+console.log("🗄️ SQLite conectado");
+
+// Crear tabla
+db.prepare(`
+  CREATE TABLE IF NOT EXISTS usos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    clave TEXT UNIQUE,
+    usuario TEXT,
+    licencia TEXT,
+    ot TEXT,
+    reclamo TEXT,
+    fecha TEXT
+  )
+`).run();
 
 // ================= CONFIG =================
 
@@ -110,33 +105,35 @@ app.post("/registrar-uso", (req, res) => {
   const user = LICENCIAS[licencia]?.usuario || "DESCONOCIDO";
   const clave = `${licencia}-${ot}-${reclamo}`;
 
-  const sql = `
-    INSERT OR IGNORE INTO usos (clave, usuario, licencia, ot, reclamo, fecha)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `;
+  try {
 
-  db.run(sql, [
-    clave,
-    user,
-    licencia,
-    ot,
-    reclamo,
-    new Date().toISOString()
-  ], function(err) {
+    const result = db.prepare(`
+      INSERT OR IGNORE INTO usos
+      (clave, usuario, licencia, ot, reclamo, fecha)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      clave,
+      user,
+      licencia,
+      ot,
+      reclamo,
+      new Date().toISOString()
+    );
 
-    if (err) {
-      console.error("❌ Error insert:", err);
-      return res.status(500).json({ error: "DB_ERROR" });
-    }
-
-    if (this.changes === 0) {
+    if (result.changes === 0) {
       console.log("⚠️ DUPLICADO IGNORADO:", clave);
     } else {
       console.log("📊 USO REGISTRADO:", clave);
     }
 
     res.json({ ok: true });
-  });
+
+  } catch (e) {
+
+    console.error("❌ DB ERROR:", e);
+    res.status(500).json({ error: "DB_ERROR" });
+
+  }
 });
 
 // ================= ADMIN =================
@@ -147,28 +144,24 @@ app.get("/licencias", authAdmin, (req, res) => {
 
 app.get("/usos-admin", authAdmin, (req, res) => {
 
-  db.all("SELECT * FROM usos ORDER BY fecha DESC", [], (err, rows) => {
-
-    if (err) {
-      return res.status(500).json({ error: "DB_ERROR" });
-    }
-
+  try {
+    const rows = db.prepare("SELECT * FROM usos ORDER BY fecha DESC").all();
     res.json(rows);
-  });
+  } catch (e) {
+    res.status(500).json({ error: "DB_ERROR" });
+  }
 });
 
 // ================= SUPERVISOR =================
 
 app.get("/usos", authSupervisor, (req, res) => {
 
-  db.all("SELECT * FROM usos ORDER BY fecha DESC", [], (err, rows) => {
-
-    if (err) {
-      return res.status(500).json({ error: "DB_ERROR" });
-    }
-
+  try {
+    const rows = db.prepare("SELECT * FROM usos ORDER BY fecha DESC").all();
     res.json(rows);
-  });
+  } catch (e) {
+    res.status(500).json({ error: "DB_ERROR" });
+  }
 });
 
 // ================= LICENCIAS =================
