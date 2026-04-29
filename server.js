@@ -6,18 +6,44 @@ const path = require("path");
 
 const express = require("express");
 const cors = require("cors");
+const sqlite3 = require("sqlite3").verbose();
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
+// ================= DATABASE =================
+
+const db = new sqlite3.Database("./database.db", (err) => {
+  if (err) {
+    console.error("❌ Error DB:", err);
+  } else {
+    console.log("🗄️ SQLite conectado");
+  }
+});
+
+db.serialize(() => {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS usos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      clave TEXT UNIQUE,
+      usuario TEXT,
+      licencia TEXT,
+      ot TEXT,
+      reclamo TEXT,
+      fecha TEXT
+    )
+  `);
+});
+
 // ================= CONFIG =================
 
 const ADMIN_KEY = process.env.ADMIN_KEY;
 const SUPERVISOR_KEY = process.env.SUPERVISOR_KEY;
 
-// 🔐 Base de licencias
+// ================= LICENCIAS =================
+
 const LICENCIAS = {
   "B23VB198.ADMIN!": { activo: true, usuario: "ADMIN", expira: "2026-12-31" },
   "B23VB200": { activo: true, usuario: "Alejandra B.", expira: "2026-12-31" },
@@ -26,10 +52,6 @@ const LICENCIAS = {
   "B23VB888": { activo: true, usuario: "Fernando S.", expira: "2026-05-31" },
   "TEST-OK": { activo: false, usuario: "test", expira: "2026-12-31" }
 };
-
-// ================= REGISTRO DE USOS =================
-
-const USOS = [];
 
 // ================= MIDDLEWARE =================
 
@@ -86,32 +108,35 @@ app.post("/registrar-uso", (req, res) => {
   }
 
   const user = LICENCIAS[licencia]?.usuario || "DESCONOCIDO";
-
-  // 🔥 CLAVE ÚNICA (ANTI DUPLICADOS REAL)
   const clave = `${licencia}-${ot}-${reclamo}`;
 
-  const existe = USOS.some(u => u.clave === clave);
+  const sql = `
+    INSERT OR IGNORE INTO usos (clave, usuario, licencia, ot, reclamo, fecha)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `;
 
-  if (!existe) {
+  db.run(sql, [
+    clave,
+    user,
+    licencia,
+    ot,
+    reclamo,
+    new Date().toISOString()
+  ], function(err) {
 
-    const registro = {
-      clave, // 🔑 clave interna
-      usuario: user,
-      licencia,
-      ot,
-      reclamo,
-      fecha: new Date().toISOString()
-    };
+    if (err) {
+      console.error("❌ Error insert:", err);
+      return res.status(500).json({ error: "DB_ERROR" });
+    }
 
-    USOS.push(registro);
+    if (this.changes === 0) {
+      console.log("⚠️ DUPLICADO IGNORADO:", clave);
+    } else {
+      console.log("📊 USO REGISTRADO:", clave);
+    }
 
-    console.log("📊 USO REGISTRADO:", registro);
-
-  } else {
-    console.log("⚠️ DUPLICADO IGNORADO:", clave);
-  }
-
-  res.json({ ok: true });
+    res.json({ ok: true });
+  });
 });
 
 // ================= ADMIN =================
@@ -121,13 +146,29 @@ app.get("/licencias", authAdmin, (req, res) => {
 });
 
 app.get("/usos-admin", authAdmin, (req, res) => {
-  res.json(USOS);
+
+  db.all("SELECT * FROM usos ORDER BY fecha DESC", [], (err, rows) => {
+
+    if (err) {
+      return res.status(500).json({ error: "DB_ERROR" });
+    }
+
+    res.json(rows);
+  });
 });
 
 // ================= SUPERVISOR =================
 
 app.get("/usos", authSupervisor, (req, res) => {
-  res.json(USOS);
+
+  db.all("SELECT * FROM usos ORDER BY fecha DESC", [], (err, rows) => {
+
+    if (err) {
+      return res.status(500).json({ error: "DB_ERROR" });
+    }
+
+    res.json(rows);
+  });
 });
 
 // ================= LICENCIAS =================
