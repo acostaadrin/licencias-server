@@ -128,6 +128,52 @@ app.post("/registrar-uso", async (req, res) => {
   }
 });
 
+// ============= METRICAS ==================
+
+app.get("/metricas", authSupervisor, async (req, res) => {
+
+  try {
+
+    // KPIs
+    const kpis = await pool.query(`
+      SELECT
+        COUNT(*) FILTER (
+          WHERE DATE(fecha) = CURRENT_DATE
+        ) AS hoy,
+
+        COUNT(*) FILTER (
+          WHERE fecha >= NOW() - INTERVAL '7 days'
+        ) AS semana,
+
+        COUNT(*) FILTER (
+          WHERE DATE_TRUNC('month', fecha) = DATE_TRUNC('month', NOW())
+        ) AS mes
+      FROM usos
+    `);
+
+    // Ranking
+    const ranking = await pool.query(`
+      SELECT usuario, COUNT(*) as total
+      FROM usos
+      GROUP BY usuario
+      ORDER BY total DESC
+    `);
+
+    res.json({
+      hoy: Number(kpis.rows[0].hoy),
+      semana: Number(kpis.rows[0].semana),
+      mes: Number(kpis.rows[0].mes),
+      ranking: ranking.rows
+    });
+
+  } catch (e) {
+
+    console.error("❌ METRICAS ERROR:", e);
+    res.status(500).json({ error: "DB_ERROR" });
+
+  }
+});
+
 // ================= ADMIN =================
 
 app.get("/licencias", authAdmin, (req, res) => {
