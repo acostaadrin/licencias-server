@@ -14,10 +14,13 @@ app.use(express.json());
 
 // ================= CONFIG =================
 
-// 🔐 Clave admin (cambiar en producción)
+// 🔐 Clave admin
 const ADMIN_KEY = process.env.ADMIN_KEY;
 
-// 🔐 Base de licencias (temporal en memoria)
+// 🔐 Clave supervisor
+const SUPERVISOR_KEY = process.env.SUPERVISOR_KEY;
+
+// 🔐 Base de licencias
 const LICENCIAS = {
   "B23VB198.ADMIN!": {
     activo: true,
@@ -51,13 +54,30 @@ const LICENCIAS = {
   }
 };
 
+// ================= REGISTRO DE USOS =================
+
+const USOS = [];
+
 // ================= MIDDLEWARE ADMIN =================
 
 function authAdmin(req, res, next) {
 
   const key = req.headers["x-admin-key"];
 
-  if (key !== ADMIN_KEY) {
+  if (!key || key !== ADMIN_KEY) {
+    return res.status(403).json({ error: "No autorizado" });
+  }
+
+  next();
+}
+
+// ================= MIDDLEWARE SUPERVISOR =================
+
+function authSupervisor(req, res, next) {
+
+  const key = req.headers["x-supervisor-key"];
+
+  if (!key || key !== SUPERVISOR_KEY) {
     return res.status(403).json({ error: "No autorizado" });
   }
 
@@ -84,7 +104,6 @@ app.post("/validar-licencia", (req, res) => {
     return res.json({ valido: false, motivo: "DESACTIVADA" });
   }
 
-  // 🔥 Validar fecha
   const hoy = new Date();
   const expira = new Date(data.expira);
 
@@ -103,14 +122,53 @@ app.post("/validar-licencia", (req, res) => {
   });
 });
 
+// ================= REGISTRAR USO =================
+
+app.post("/registrar-uso", (req, res) => {
+
+  const { licencia, ot, reclamo, fecha } = req.body;
+
+  if (!licencia) {
+    return res.status(400).json({ error: "SIN_LICENCIA" });
+  }
+
+  const user = LICENCIAS[licencia]?.usuario || "DESCONOCIDO";
+
+  const registro = {
+    usuario: user,
+    licencia,
+    ot,
+    reclamo,
+    fecha
+  };
+
+  USOS.push(registro);
+
+  console.log("📊 USO REGISTRADO:", registro);
+
+  res.json({ ok: true });
+});
+
 // ================= ADMIN =================
 
-// 🔹 Obtener todas las licencias
+// 🔹 Obtener licencias
 app.get("/licencias", authAdmin, (req, res) => {
   res.json(LICENCIAS);
 });
 
-// 🔹 Crear nueva licencia
+// 🔹 Obtener usos (ADMIN también puede ver todo)
+app.get("/usos-admin", authAdmin, (req, res) => {
+  res.json(USOS);
+});
+
+// ================= SUPERVISOR =================
+
+// 🔹 Obtener usos (solo lectura)
+app.get("/usos", authSupervisor, (req, res) => {
+  res.json(USOS);
+});
+
+// 🔹 Crear licencia
 app.post("/licencias", authAdmin, (req, res) => {
 
   const { key, usuario, expira } = req.body;
@@ -163,12 +221,10 @@ app.put("/licencias/:key", authAdmin, (req, res) => {
 
 // ================= AUTO UPDATE =================
 
-// servir archivo CRX
 app.get("/garantia-extension.crx", (req, res) => {
   res.sendFile(path.join(__dirname, "garantia-extension.crx"));
 });
 
-// servir archivo XML
 app.get("/updates.xml", (req, res) => {
   res.set("Content-Type", "text/xml");
   res.sendFile(path.join(__dirname, "updates.xml"));
