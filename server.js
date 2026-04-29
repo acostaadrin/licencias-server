@@ -6,7 +6,7 @@ const path = require("path");
 
 const express = require("express");
 const cors = require("cors");
-const Database = require("better-sqlite3");
+const { Pool } = require("pg");
 
 const app = express();
 
@@ -15,22 +15,25 @@ app.use(express.json());
 
 // ================= DATABASE =================
 
-const db = new Database("database.db");
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
 
-console.log("🗄️ SQLite conectado");
+console.log("🐘 PostgreSQL conectado");
 
 // Crear tabla
-db.prepare(`
+pool.query(`
   CREATE TABLE IF NOT EXISTS usos (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     clave TEXT UNIQUE,
     usuario TEXT,
     licencia TEXT,
     ot TEXT,
     reclamo TEXT,
-    fecha TEXT
+    fecha TIMESTAMP
   )
-`).run();
+`);
 
 // ================= CONFIG =================
 
@@ -94,7 +97,7 @@ app.post("/validar-licencia", (req, res) => {
 
 // ================= REGISTRAR USO =================
 
-app.post("/registrar-uso", (req, res) => {
+app.post("/registrar-uso", async (req, res) => {
 
   const { licencia, ot, reclamo } = req.body;
 
@@ -107,24 +110,13 @@ app.post("/registrar-uso", (req, res) => {
 
   try {
 
-    const result = db.prepare(`
-      INSERT OR IGNORE INTO usos
-      (clave, usuario, licencia, ot, reclamo, fecha)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(
-      clave,
-      user,
-      licencia,
-      ot,
-      reclamo,
-      new Date().toISOString()
-    );
+    await pool.query(`
+      INSERT INTO usos (clave, usuario, licencia, ot, reclamo, fecha)
+      VALUES ($1, $2, $3, $4, $5, NOW())
+      ON CONFLICT (clave) DO NOTHING
+    `, [clave, user, licencia, ot, reclamo]);
 
-    if (result.changes === 0) {
-      console.log("⚠️ DUPLICADO IGNORADO:", clave);
-    } else {
-      console.log("📊 USO REGISTRADO:", clave);
-    }
+    console.log("📊 USO REGISTRADO:", clave);
 
     res.json({ ok: true });
 
@@ -142,11 +134,11 @@ app.get("/licencias", authAdmin, (req, res) => {
   res.json(LICENCIAS);
 });
 
-app.get("/usos-admin", authAdmin, (req, res) => {
+app.get("/usos-admin", authAdmin, async (req, res) => {
 
   try {
-    const rows = db.prepare("SELECT * FROM usos ORDER BY fecha DESC").all();
-    res.json(rows);
+    const result = await pool.query("SELECT * FROM usos ORDER BY fecha DESC");
+    res.json(result.rows);
   } catch (e) {
     res.status(500).json({ error: "DB_ERROR" });
   }
@@ -154,11 +146,11 @@ app.get("/usos-admin", authAdmin, (req, res) => {
 
 // ================= SUPERVISOR =================
 
-app.get("/usos", authSupervisor, (req, res) => {
+app.get("/usos", authSupervisor, async (req, res) => {
 
   try {
-    const rows = db.prepare("SELECT * FROM usos ORDER BY fecha DESC").all();
-    res.json(rows);
+    const result = await pool.query("SELECT * FROM usos ORDER BY fecha DESC");
+    res.json(result.rows);
   } catch (e) {
     res.status(500).json({ error: "DB_ERROR" });
   }
