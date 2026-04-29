@@ -134,36 +134,70 @@ app.get("/metricas", authSupervisor, async (req, res) => {
 
   try {
 
-    // KPIs
-    const kpis = await pool.query(`
-      SELECT
-        COUNT(*) FILTER (
-          WHERE DATE(fecha) = CURRENT_DATE
-        ) AS hoy,
-
-        COUNT(*) FILTER (
-          WHERE fecha >= NOW() - INTERVAL '7 days'
-        ) AS semana,
-
-        COUNT(*) FILTER (
-          WHERE DATE_TRUNC('month', fecha) = DATE_TRUNC('month', NOW())
-        ) AS mes
+    const result = await pool.query(`
+      SELECT usuario, reclamo, fecha
       FROM usos
     `);
 
-    // Ranking
-    const ranking = await pool.query(`
-      SELECT usuario, COUNT(*) as total
-      FROM usos
-      GROUP BY usuario
-      ORDER BY total DESC
-    `);
+    const rows = result.rows;
+
+    // 🔧 función correcta (igual que frontend)
+    function contarReclamos(str) {
+      if (!str) return 0;
+      return str.split("-").map(s => s.trim()).filter(Boolean).length;
+    }
+
+    const hoy = new Date();
+    const inicioSemana = new Date();
+    inicioSemana.setDate(hoy.getDate() - 7);
+
+    let totalHoy = 0;
+    let totalSemana = 0;
+    let totalMes = 0;
+
+    const ranking = {};
+
+    rows.forEach(r => {
+
+      const fecha = new Date(r.fecha);
+      const cantidad = contarReclamos(r.reclamo);
+
+      // HOY
+      if (fecha.toDateString() === hoy.toDateString()) {
+        totalHoy += cantidad;
+      }
+
+      // SEMANA
+      if (fecha >= inicioSemana) {
+        totalSemana += cantidad;
+      }
+
+      // MES
+      if (
+        fecha.getMonth() === hoy.getMonth() &&
+        fecha.getFullYear() === hoy.getFullYear()
+      ) {
+        totalMes += cantidad;
+      }
+
+      // RANKING
+      if (!ranking[r.usuario]) {
+        ranking[r.usuario] = 0;
+      }
+
+      ranking[r.usuario] += cantidad;
+
+    });
+
+    const rankingArray = Object.entries(ranking)
+      .map(([usuario, total]) => ({ usuario, total }))
+      .sort((a, b) => b.total - a.total);
 
     res.json({
-      hoy: Number(kpis.rows[0].hoy),
-      semana: Number(kpis.rows[0].semana),
-      mes: Number(kpis.rows[0].mes),
-      ranking: ranking.rows
+      hoy: totalHoy,
+      semana: totalSemana,
+      mes: totalMes,
+      ranking: rankingArray
     });
 
   } catch (e) {
@@ -173,7 +207,6 @@ app.get("/metricas", authSupervisor, async (req, res) => {
 
   }
 });
-
 // ================= ADMIN =================
 
 app.get("/licencias", authAdmin, (req, res) => {
