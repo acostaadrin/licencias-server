@@ -106,17 +106,22 @@ app.post("/registrar-uso", async (req, res) => {
   }
 
   const user = LICENCIAS[licencia]?.usuario || "DESCONOCIDO";
-  const clave = `${licencia}-${ot}-${reclamo}`;
+  const reclamos = reclamo.split("-").map(r => r.trim()).filter(Boolean);
 
   try {
 
-    await pool.query(`
-      INSERT INTO usos (clave, usuario, licencia, ot, reclamo, fecha)
-      VALUES ($1, $2, $3, $4, $5, NOW())
-      ON CONFLICT (clave) DO NOTHING
-    `, [clave, user, licencia, ot, reclamo]);
+    for (const r of reclamos) {
 
-    console.log("📊 USO REGISTRADO:", clave);
+      const clave = `${licencia}-${ot}-${r}`;
+
+      await pool.query(`
+        INSERT INTO usos (clave, usuario, licencia, ot, reclamo, fecha)
+        VALUES ($1, $2, $3, $4, $5, NOW())
+        ON CONFLICT (clave) DO NOTHING
+      `, [clave, user, licencia, ot, r]);
+
+      console.log("📊 RECLAMO REGISTRADO:", r);
+    }
 
     res.json({ ok: true });
 
@@ -160,7 +165,7 @@ app.get("/metricas", authSupervisor, async (req, res) => {
     rows.forEach(r => {
 
       const fecha = new Date(r.fecha);
-      const cantidad = contarReclamos(r.reclamo);
+      const cantidad = 1;
 
       // HOY
       if (fecha.toDateString() === hoy.toDateString()) {
