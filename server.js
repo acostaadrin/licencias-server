@@ -45,9 +45,9 @@ const SUPERVISOR_KEY = process.env.SUPERVISOR_KEY;
 const LICENCIAS = {
   "B23VB198.ADMIN!": { activo: true, usuario: "ADMIN", expira: "2026-12-31" },
   "B23VB200": { activo: true, usuario: "Alejandra B.", expira: "2026-12-31" },
-  "B23VB195": { activo: true, usuario: "Walter B.", expira: "2026-05-31" },
-  "B23VB355": { activo: true, usuario: "Jorge G.", expira: "2026-05-31" },
-  "B23VB888": { activo: true, usuario: "Fernando S.", expira: "2026-05-31" },
+  "B23VB195": { activo: true, usuario: "Walter B.", expira: "2026-04-30" },
+  "B23VB355": { activo: true, usuario: "Jorge G.", expira: "2026-04-30" },
+  "B23VB888": { activo: true, usuario: "Fernando S.", expira: "2026-04-30" },
   "TEST-OK": { activo: false, usuario: "test", expira: "2026-12-31" }
 };
 
