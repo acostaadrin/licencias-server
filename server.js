@@ -162,7 +162,11 @@ app.get("/metricas", authSupervisor, async (req, res) => {
 
     const ranking = {};
 
+    const USUARIOS_PERMITIDOS = ["Walter B.", "Jorge G.", "Fernando S."];
+
     rows.forEach(r => {
+
+      if (!USUARIOS_PERMITIDOS.includes(r.usuario)) return;
 
       const fecha = new Date(r.fecha);
       const cantidad = 1;
