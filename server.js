@@ -290,7 +290,7 @@ app.post("/registrar-uso", async (req, res) => {
 
     reclamos = [...new Set(
       reclamoRaw
-        .split("-")
+        .split(/[-/]/)
         .map(r => r.trim())
         .filter(Boolean)
     )];
@@ -400,6 +400,7 @@ app.post("/registrar-uso", async (req, res) => {
 
       const clave = `${licencia}-${numeroOT}-${r}`;
 
+      
       const resultado = await client.query(`
 
         INSERT INTO usos (
@@ -408,22 +409,37 @@ app.post("/registrar-uso", async (req, res) => {
           licencia,
           ot,
           reclamo,
-          fecha
+          fecha,
+          tipo,
+          origen,
+          duracion_ms,
+          version_extension
         )
 
-        VALUES ($1, $2, $3, $4, $5, NOW())
+        VALUES (
+          $1, $2, $3, $4, $5,
+          NOW(),
+          $6, $7, $8, $9
+        )
 
         ON CONFLICT (clave) DO NOTHING
 
         RETURNING id
 
       `, [
+
         clave,
         usuario,
         licencia,
         numeroOT,
-        r
+        r,
+        tipo,
+        origenRegistro,
+        duracionRegistro,
+        versionRegistro
+
       ]);
+
 
       if (resultado.rowCount > 0) {
 
