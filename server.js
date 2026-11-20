@@ -95,42 +95,236 @@ app.post("/validar-licencia", (req, res) => {
   });
 });
 
+
 // ================= REGISTRAR USO =================
 
 app.post("/registrar-uso", async (req, res) => {
 
-  const { licencia, ot, reclamo } = req.body;
+  const { licencia, ot, reclamo } = req.body || {};
 
-  if (!licencia || !ot || !reclamo) {
-    return res.status(400).json({ error: "DATOS_INCOMPLETOS" });
+  // ================= VALIDAR DATOS =================
+
+  if (
+    typeof licencia !== "string" ||
+    !["string", "number"].includes(typeof ot) ||
+    !["string", "number"].includes(typeof reclamo)
+  ) {
+
+    return res.status(400).json({
+      error: "DATOS_INCOMPLETOS"
+    });
+
   }
 
-  const user = LICENCIAS[licencia]?.usuario || "DESCONOCIDO";
-  const reclamos = reclamo.split("-").map(r => r.trim()).filter(Boolean);
+  const numeroOT = String(ot).trim().toUpperCase();
+  const reclamoRaw = String(reclamo).trim().toUpperCase();
+
+  if (!licencia.trim() || !numeroOT || !reclamoRaw) {
+
+    return res.status(400).json({
+      error: "DATOS_INCOMPLETOS"
+    });
+
+  }
+
+
+  // ================= VALIDAR LICENCIA =================
+
+  const dataLicencia =
+    Object.prototype.hasOwnProperty.call(LICENCIAS, licencia)
+      ? LICENCIAS[licencia]
+      : null;
+
+  if (!dataLicencia) {
+
+    return res.status(403).json({
+      error: "LICENCIA_INVALIDA"
+    });
+
+  }
+
+  if (!dataLicencia.activo) {
+
+    return res.status(403).json({
+      error: "LICENCIA_DESACTIVADA"
+    });
+
+  }
+
+  const hoy = new Date();
+
+  const expira = new Date(dataLicencia.expira);
+
+  if (isNaN(expira.getTime()) || hoy > expira) {
+
+    return res.status(403).json({
+      error: "LICENCIA_EXPIRADA"
+    });
+
+  }
+
+  const usuario = dataLicencia.usuario;
+
+
+  // ================= CLASIFICACION =================
+
+  const esGAR = /^GAR-\d{4}-\d{6}$/.test(numeroOT);
+
+  const esOTInterna = /^\d+$/.test(numeroOT);
+
+  if (!esGAR && !esOTInterna) {
+
+    return res.status(400).json({
+      error: "FORMATO_OT_INVALIDO"
+    });
+
+  }
+
+  let tipo;
+  let reclamos;
+
+  if (esGAR) {
+
+    if (reclamoRaw !== "GAR") {
+
+      return res.status(400).json({
+        error: "RECLAMO_GAR_INVALIDO"
+      });
+
+    }
+
+    tipo = "TALLER_AUTORIZADO";
+    reclamos = ["GAR"];
+
+  } else if (reclamoRaw === "CAMPANIA") {
+
+    tipo = "CAMPANIA";
+    reclamos = ["CAMPANIA"];
+
+  } else {
+
+    tipo = "GARANTIA_INTERNA";
+
+    reclamos = [...new Set(
+      reclamoRaw
+        .split("-")
+        .map(r => r.trim())
+        .filter(Boolean)
+    )];
+
+    if (
+      reclamos.length === 0 ||
+      reclamos.some(r => !/^\d+$/.test(r))
+    ) {
+
+      return res.status(400).json({
+        error: "RECLAMO_INVALIDO"
+      });
+
+    }
+
+  }
+
+
+  // ================= REGISTRAR =================
+
+  let registrados = 0;
+  let duplicados = 0;
+  let client;
 
   try {
 
+    client = await pool.connect();
+
+    await client.query("BEGIN");
+
     for (const r of reclamos) {
 
-      const clave = `${licencia}-${ot}-${r}`;
+      const clave = `${licencia}-${numeroOT}-${r}`;
 
-      await pool.query(`
-        INSERT INTO usos (clave, usuario, licencia, ot, reclamo, fecha)
+      const resultado = await client.query(`
+
+        INSERT INTO usos (
+          clave,
+          usuario,
+          licencia,
+          ot,
+          reclamo,
+          fecha
+        )
+
         VALUES ($1, $2, $3, $4, $5, NOW())
-        ON CONFLICT (clave) DO NOTHING
-      `, [clave, user, licencia, ot, r]);
 
-      console.log("📊 RECLAMO REGISTRADO:", r);
+        ON CONFLICT (clave) DO NOTHING
+
+        RETURNING id
+
+      `, [
+        clave,
+        usuario,
+        licencia,
+        numeroOT,
+        r
+      ]);
+
+      if (resultado.rowCount > 0) {
+
+        registrados++;
+
+      } else {
+
+        duplicados++;
+
+      }
+
     }
 
-    res.json({ ok: true });
+    await client.query("COMMIT");
+
+    console.log("📊 REGISTRO DE PRODUCTIVIDAD:", {
+      usuario,
+      ot: numeroOT,
+      tipo,
+      registrados,
+      duplicados
+    });
+
+    return res.json({
+
+      ok: true,
+      tipo,
+      recibidos: reclamos.length,
+      registrados,
+      duplicados
+
+    });
 
   } catch (e) {
 
+    if (client) {
+
+      try {
+        await client.query("ROLLBACK");
+      } catch (rollbackError) {
+        console.error("❌ ROLLBACK ERROR:", rollbackError);
+      }
+
+    }
+
     console.error("❌ DB ERROR:", e);
-    res.status(500).json({ error: "DB_ERROR" });
+
+    return res.status(500).json({
+      error: "DB_ERROR"
+    });
+
+  } finally {
+
+    if (client) {
+      client.release();
+    }
 
   }
+
 });
 
 // ============= METRICAS ==================
