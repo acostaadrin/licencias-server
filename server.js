@@ -20,20 +20,96 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-console.log("🐘 PostgreSQL conectado");
+// ================= INICIALIZAR DATABASE =================
 
-// Crear tabla
-pool.query(`
-  CREATE TABLE IF NOT EXISTS usos (
-    id SERIAL PRIMARY KEY,
-    clave TEXT UNIQUE,
-    usuario TEXT,
-    licencia TEXT,
-    ot TEXT,
-    reclamo TEXT,
-    fecha TIMESTAMP
-  )
-`);
+async function inicializarDatabase() {
+
+  const client = await pool.connect();
+
+  try {
+
+    await client.query("BEGIN");
+
+    // Crear tabla si todavía no existe
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS usos (
+        id SERIAL PRIMARY KEY,
+        clave TEXT UNIQUE,
+        usuario TEXT,
+        licencia TEXT,
+        ot TEXT,
+        reclamo TEXT,
+        fecha TIMESTAMP
+      )
+    `);
+
+    // Incorporar nuevas columnas
+    await client.query(`
+      ALTER TABLE usos
+        ADD COLUMN IF NOT EXISTS tipo TEXT,
+        ADD COLUMN IF NOT EXISTS origen TEXT,
+        ADD COLUMN IF NOT EXISTS duracion_ms INTEGER,
+        ADD COLUMN IF NOT EXISTS version_extension TEXT
+    `);
+
+    // Clasificar registros históricos
+    const resultado = await client.query(`
+      UPDATE usos
+      SET tipo = CASE
+
+        WHEN ot ~ '^GAR-[0-9]{4}-[0-9]{6}$'
+          AND UPPER(TRIM(reclamo)) = 'GAR'
+          THEN 'TALLER_AUTORIZADO'
+
+        WHEN ot ~ '^[0-9]+$'
+          AND UPPER(TRIM(reclamo)) = 'CAMPANIA'
+          THEN 'CAMPANIA'
+
+        WHEN ot ~ '^[0-9]+$'
+          AND TRIM(reclamo) ~ '^[0-9]+([[:space:]]*[-/][[:space:]]*[0-9]+)*$'
+          THEN 'GARANTIA_INTERNA'
+
+        ELSE 'SIN_CLASIFICAR'
+
+      END
+
+      WHERE tipo IS NULL
+    `);
+
+    const total = await client.query(`
+      SELECT COUNT(*) AS total FROM usos
+    `);
+
+    await client.query("COMMIT");
+
+    console.log("🐘 PostgreSQL conectado correctamente");
+
+    console.log("✅ Estructura de base de datos verificada");
+
+    console.log(
+      "📊 Registros históricos clasificados:",
+      resultado.rowCount
+    );
+
+    console.log(
+      "📊 Total de registros almacenados:",
+      total.rows[0].total
+    );
+
+  } catch (error) {
+
+    await client.query("ROLLBACK");
+
+    throw error;
+
+  } finally {
+
+    client.release();
+
+  }
+
+}
+
 
 // ================= CONFIG =================
 
@@ -100,7 +176,14 @@ app.post("/validar-licencia", (req, res) => {
 
 app.post("/registrar-uso", async (req, res) => {
 
-  const { licencia, ot, reclamo } = req.body || {};
+  const {
+    licencia,
+    ot,
+    reclamo,
+    origen,
+    duracionMs,
+    version
+  } = req.body || {};
 
   // ================= VALIDAR DATOS =================
 
@@ -224,6 +307,81 @@ app.post("/registrar-uso", async (req, res) => {
     }
 
   }
+
+
+  // ================= METADATOS =================
+
+  const origenesPermitidos = {
+
+    GARANTIA_INTERNA: [
+      "SOLICITUD_INTERNA"
+    ],
+
+    CAMPANIA: [
+      "SOLICITUD_INTERNA",
+      "CAMPANIA_SIN_SOLICITUD"
+    ],
+
+    TALLER_AUTORIZADO: [
+      "TALLER_AUTORIZADO"
+    ]
+
+  };
+
+  let origenRegistro = null;
+
+  if (typeof origen === "string") {
+
+    const origenNormalizado =
+      origen.trim().toUpperCase();
+
+    if (
+      origenesPermitidos[tipo]
+        ?.includes(origenNormalizado)
+    ) {
+
+      origenRegistro = origenNormalizado;
+
+    }
+
+  }
+
+  // Deducir origen cuando sea posible
+
+  if (!origenRegistro) {
+
+    if (tipo === "GARANTIA_INTERNA") {
+
+      origenRegistro = "SOLICITUD_INTERNA";
+
+    } else if (tipo === "TALLER_AUTORIZADO") {
+
+      origenRegistro = "TALLER_AUTORIZADO";
+
+    }
+
+  }
+
+  // Validar duración
+
+  const duracionRegistro =
+
+    Number.isInteger(duracionMs) &&
+    duracionMs >= 0 &&
+    duracionMs <= 2147483647
+
+      ? duracionMs
+      : null;
+
+  // Validar versión
+
+  const versionRegistro =
+
+    typeof version === "string" &&
+    /^\d+(\.\d+){1,3}$/.test(version.trim())
+
+      ? version.trim()
+      : null;
 
 
   // ================= REGISTRAR =================
@@ -496,10 +654,36 @@ app.get("/updates.xml", (req, res) => {
   res.sendFile(path.join(__dirname, "updates.xml"));
 });
 
+
 // ================= START =================
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
-  console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
-});
+async function iniciarServidor() {
+
+  try {
+
+    await inicializarDatabase();
+
+    app.listen(PORT, () => {
+
+      console.log(
+        `🚀 Servidor corriendo en puerto ${PORT}`
+      );
+
+    });
+
+  } catch (error) {
+
+    console.error(
+      "❌ ERROR AL INICIALIZAR EL SERVIDOR:",
+      error
+    );
+
+    process.exit(1);
+
+  }
+
+}
+
+iniciarServidor();
